@@ -2,7 +2,7 @@
 
 ## Introduction
 
-tide-rs is a flexible config parser for Rust, designed to handle the TIDE configuration 
+tide_rs is a flexible config parser for Rust, designed to handle the TIDE configuration 
 format. It provides an easy-to-use API for accessing configuration values from
 TIDE files.
 
