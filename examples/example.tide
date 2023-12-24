@@ -1,0 +1,15 @@
+# This is an inline comment
+database {
+    type: string = "mysql"
+    host: string = "localhost"
+    port: integer = 3306
+    credentials {
+        username: string = "user"
+        password: string = "pass"
+    }
+}
+
+myApp {
+    features: array[string] = ["feature1", "feature2", "feature3"]
+    numbers: array[integer] = [1, 2, 3]
+}
