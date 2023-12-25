@@ -1,9 +1,9 @@
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-// use std::str::FromStr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ConfigValue {
     String(String),
     Integer(i32),
@@ -16,7 +16,6 @@ pub enum ConfigValue {
 pub struct TIDE {
     pub data: HashMap<String, ConfigValue>,
 }
-
 
 pub trait TypeConverter {
     fn to_string(&self) -> Result<String, ConfigError>;
@@ -62,7 +61,6 @@ impl TypeConverter for ConfigValue {
         }
     }
 }
-
 
 #[derive(Debug)]
 pub enum ConfigError {
@@ -127,13 +125,59 @@ impl TIDE {
 
         Ok(TIDE { data })
     }
+
+    pub fn get_config_value(&self, key: &str) -> Result<ConfigValue, ConfigError> {
+        let env_key = key.to_uppercase().replace(".", "_");
+
+        if let Ok(env_val) = env::var(&env_key) {
+            return match self.data.get(key) {
+                Some(ConfigValue::String(_)) => Ok(ConfigValue::String(env_val)),
+                Some(ConfigValue::Integer(_)) => env_val.parse::<i32>().map(ConfigValue::Integer).map_err(|_| ConfigError::ParseError("Invalid integer from env".to_string())),
+                Some(ConfigValue::Bool(_)) => env_val.parse::<bool>().map(ConfigValue::Bool).map_err(|_| ConfigError::ParseError("Invalid bool from env".to_string())),
+                Some(ConfigValue::StringArray(_)) => Ok(ConfigValue::StringArray(env_val.split(',').map(String::from).collect())),
+                Some(ConfigValue::IntegerArray(_)) => env_val.split(',').map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>().map(ConfigValue::IntegerArray).map_err(|_| ConfigError::ParseError("Invalid integer array from env".to_string())),
+                _ => Err(ConfigError::TypeError("Unsupported type".to_string())),
+            };
+        }
+
+        self.data.get(key).cloned().ok_or(ConfigError::TypeError("Key not found".to_string()))
+    }
 }
 
+
+// Tests must be run in order to ensure that the environment variables are set and unset correctly.
+// Run with `cargo test -- --test-threads=1`
 #[test]
 fn test_correct_parsing() {
+    use std::env;
+
+    // Ensure environment variables are unset before running the test
+    env::remove_var("DATABASE_HOST");
+    env::remove_var("DATABASE_PORT");
+
     let config_file_path = "examples/example.tide";
     let tide_config = TIDE::new(config_file_path).unwrap();
 
-    assert_eq!(*tide_config.data.get("database.host").unwrap(), ConfigValue::String("\"localhost\"".to_string()));
-    assert_eq!(*tide_config.data.get("database.port").unwrap(), ConfigValue::Integer(3306));
+    assert_eq!(tide_config.get_config_value("database.host").unwrap(), ConfigValue::String("\"localhost\"".to_string()));
+    assert_eq!(tide_config.get_config_value("database.port").unwrap(), ConfigValue::Integer(3306));
+}
+
+#[test]
+fn test_correct_parsing_with_env() {
+    use std::env;
+
+    // Set environment variables for testing
+    env::set_var("DATABASE_HOST", "testhost");
+    env::set_var("DATABASE_PORT", "9999");
+
+    let config_file_path = "examples/example.tide";
+    let tide_config = TIDE::new(config_file_path).unwrap();
+
+    // Test with environment variables
+    assert_eq!(tide_config.get_config_value("database.host").unwrap(), ConfigValue::String("testhost".to_string()));
+    assert_eq!(tide_config.get_config_value("database.port").unwrap(), ConfigValue::Integer(9999));
+
+    // Unset environment variables to clean up
+    env::remove_var("DATABASE_HOST");
+    env::remove_var("DATABASE_PORT");
 }
